@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Terminal Roadmap Generator 🚀</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery.terminal/css/jquery.terminal.min.css"/>
+    <style>
+        body {
+            background-color: #11111b;
+            color: #bac2de;
+            font-family: 'Courier New', Courier, monospace;
+            height: 100vh;
+            margin: 0;
+        }
+        .terminal {
+            height: 100%;
+            overflow: auto;
+            padding: 10px;
+        }
+        .roadmap-stage {
+            border-left: 2px solid #4a9eff;
+            margin: 10px 0;
+            padding-left: 15px;
+        }
+        .stage-title {
+            color: #4a9eff;
+            margin-bottom: 10px;
+        }
+        .project {
+            margin-left: 10px;
+            padding: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="terminal" id="terminal"></div>
+    <script src="https://cdn.jsdelivr.net/npm/jquery"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery.terminal/js/jquery.terminal.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            let config = {
+                apiKey: '',
+                endpoint: 'https://jamsapi.hackclub.dev/openai/chat/completions',
+                model: 'gpt-4o-mini'
+            };
+
+            const savedConfig = localStorage.getItem('Config');
+            if (savedConfig) {
+                try {
+                    config = JSON.parse(savedConfig);
+                } catch (error) {
+                    console.error('Error reading saved config:', error);
+                }
+            }
+
+            function formatRoadmap(content) {
+                let cleanContent = content
+                    .replace(/\*\*/g, '')
+                    .replace(/##/g, '')
+                    .replace(/\*/g, '')
+                    
+                const stages = cleanContent.split(/Stage \d+:/g).filter(Boolean);
+                let formattedContent = '';
+                
+                stages.forEach((stage, index) => {
+                    formattedContent += `\n[[;#4a9eff;]━━ Stage ${index + 1} ━━]\n`;
+                    const lines = stage.trim().split('\n');
+                    lines.forEach(line => {
+                        if (line.trim()) {
+                            if (line.includes('Project') || line.trim().startsWith('-') || line.trim().startsWith('•')) {
+                                formattedContent += `  ${line.trim()}\n`;
+                            } else {
+                                formattedContent += `${line.trim()}\n`;
+                            }
+                        }
+                    });
+                    formattedContent += '\n';
+                });
+                
+                return formattedContent;
+            }
+
+            async function generateRoadmap(topic, terminal) {
+                if (!config.apiKey) {
+                    terminal.error('Error: API Key not configured. Use "config" to set your API key.');
+                    return;
+                }
+
+                try {
+                    terminal.echo("Generating roadmap... This can take some time");
+                    
+                    const response = await $.ajax({
+                        url: config.endpoint,
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${config.apiKey}`,
+                            'Content-Type': 'application/json'
+                        },
+                        data: JSON.stringify({
+                            model: config.model,
+                            messages: [
+                                {
+                                    role: "system",
+                                    content: "Create clean, well-structured learning roadmaps. Avoid using markdown formatting like **, ##, or *. Use simple bullet points (- or •) for lists. Focus on clear organization and readability."
+                                },
+                                {
+                                    role: "user",
+                                    content: `Create a learning roadmap for ${topic}. Include for each stage:
+                                    1. Key learning objectives
+                                    2. 2-3 practical projects with difficulty levels
+                                    Use simple formatting with Stage 1:, Stage 2:, etc.`
+                                }
+                            ]
+                        })
+                    });
+
+                    const roadmap = formatRoadmap(response.choices[0].message.content);
+                    terminal.echo(roadmap);
+                } catch (error) {
+                    const errorMsg = error.responseJSON 
+                        ? error.responseJSON.error.message 
+                        : 'Your Configuration is not valid or your internet connection is down';
+                    terminal.error("Error: " + errorMsg);
+                }
+            }
+
+            $('#terminal').terminal(function(command) {
+                if (command.trim() === '') return;
+                
+                const args = command.split(' ');
+                const cmd = args[0].toLowerCase();
+                
+                switch(cmd) {
+                    case 'help':
+                        this.echo("Available Commands:");
+                        this.echo("1. roadmap <topic> - Generate learning roadmap");
+                        this.echo("2. config - Configure API settings");
+                        this.echo("3. clear - Clear terminal screen");
+                        this.echo("4. help - Show this help menu");
+                        break;
+                    
+                    case 'roadmap':
+                        if (args.length < 2) {
+                            this.error('Usage: roadmap <topic>');
+                            return;
+                        }
+                        const topic = args.slice(1).join(' ');
+                        generateRoadmap(topic, this);
+                        break;
+                    
+                    case 'config':
+                        const terminal = this;
+                        terminal.push(function(input) {
+                            const [command, ...args] = input.split(' ');
+                            
+                            switch(command.toLowerCase()) {
+                                case 'apikey':
+                                    if (args.length > 0) {
+                                        config.apiKey = args.join(' ').trim();
+                                        terminal.echo(`API Key updated`);
+                                        localStorage.setItem('Config', JSON.stringify(config));
+                                    } else {
+                                        terminal.echo(`Current API Key: ${config.apiKey ? '***********' : 'Not set'}`);
+                                    }
+                                    break;
+                                
+                                case 'endpoint':
+                                    if (args.length > 0) {
+                                        config.endpoint = args.join(' ').trim();
+                                        terminal.echo(`Endpoint updated to: ${config.endpoint}`);
+                                        localStorage.setItem('Config', JSON.stringify(config));
+                                    } else {
+                                        terminal.echo(`Current Endpoint: ${config.endpoint}`);
+                                    }
+                                    break;
+                                
+                                case 'model':
+                                    if (args.length > 0) {
+                                        config.model = args.join(' ').trim();
+                                        terminal.echo(`Model updated to: ${config.model}`);
+                                        localStorage.setItem('Config', JSON.stringify(config));
+                                    } else {
+                                        terminal.echo(`Current Model: ${config.model}`);
+                                    }
+                                    break;
+                                
+                                case 'show':
+                                    terminal.echo('Current Configuration:');
+                                    terminal.echo(`API Key: ${config.apiKey ? '***********' : 'Not set'}`);
+                                    terminal.echo(`Endpoint: ${config.endpoint}`);
+                                    terminal.echo(`Model: ${config.model}`);
+                                    break;
+                                
+                                case 'help':
+                                terminal.echo('Config Command Help:');
+                                terminal.echo('- apikey [key] - Set Your API key');
+                                terminal.echo('- endpoint [url] - Set or view Your API endpoint');
+                                terminal.echo('- model [model-name] - Set or view Current AI model');
+                                terminal.echo('- show - show current configuration');
+                                terminal.echo('- exit - Return to main menu');
+                                terminal.echo('\nNote:');
+								terminal.echo('you will need API key to use this tool, can get it for free using OpenAI Genie');
+                                terminal.echo('https://app.slack.com/client/T0266FRGM/D0807G0NEEQ');
+                                    break;
+                                
+                                case 'exit':
+                                    terminal.pop();
+                                    return;
+                                
+                                default:
+                                    terminal.echo(`Unknown config command: ${command}`);
+                                    terminal.echo('Type "help" for available config commands');
+                            }
+                        }, {
+                            prompt: 'config> ',
+                            name: 'config'
+                        });
+                        break;
+                    
+                    case 'clear':
+                        this.clear();
+                        break;
+                    
+                    default:
+                        this.error(`Unknown command: ${cmd}`);
+                        this.echo('Type "help" for available commands');
+                }
+            }, {
+                greetings: [
+                'Welcome To AI Terminal Roadmap Generator 🚀',
+                'Type "help" to see available commands.',
+                'Use "config" to set up your API key and endpoint.',
+				"\nyou will need API key to use this tool, can get it for free using OpenAI Genie",
+                "https://app.slack.com/client/T0266FRGM/D0807G0NEEQ"
+                ].join('\n'),
+                prompt: '> '
+            });
+        });
+    </script>
+</body>
+</html>
